@@ -1,5 +1,5 @@
-import { assignRoles, MIN_PLAYERS, MAX_PLAYERS, NIGHT_ROLES } from "./roles";
-import { checkWin } from "./rules";
+import { assignRoles, MIN_PLAYERS, MAX_PLAYERS, NIGHT_ROLES } from "./roles.js";
+import { checkWin } from "./rules.js";
 
 
 export const DURATIONS = { NIGHT: 30000, DAY: 30000, VOTING: 30000 }
@@ -113,7 +113,7 @@ export function beginVoting(room) {
 
 export function castVote(room, voterId, targetId) {
     if (room.phase !== 'VOTING') throw new Error('It is not voting time')
-    if (!room.players[voteId]?.alive) throw new Error('Dead players cannot vote')
+    if (!room.players[voterId]?.alive) throw new Error('Dead players cannot vote')
     if (targetId !== 'SKIP' && !room.players[targetId]?.alive) throw new Error("Invalid target")
     room.votes[voterId] = targetId
     return room
@@ -122,7 +122,7 @@ export function castVote(room, voterId, targetId) {
 export function allVotesIn(room) {
     return Object.values(room.players)
         .filter((p) => p.alive)
-        .every((p) => p.id in room, votes)
+        .every((p) => p.id in room.votes)
 }
 
 export function resolveVoting(room) {
@@ -149,7 +149,7 @@ export function resolveVoting(room) {
 
 function endGame(room, winner) {
     room.phase = 'GAME_OVER'
-    room.winner - winner
+    room.winner = winner
     return room
 }
 
@@ -163,19 +163,19 @@ export function viewFor(room, viewerId) {
         hostId: room.hostId,
         phase: room.phase,
         round: room.round,
-        phaseEndsAt: room.phaseEndAt,
+        phaseEndsAt: room.phaseEndsAt,
         winner: room.winner,
         log: room.log,
         votes: room.phase === 'VOTING' ? room.votes : {},
         me: me
-            ? { id: me.id, roles: me.role, alive: me.alive, hasActed: viewerId in room.nightActions }
+            ? { id: me.id, role: me.role, alive: me.alive, hasActed: viewerId in room.nightActions }
             : null,
         players: Object.values(room.players).map((p) => ({
             id: p.id,
             name: p.name,
             connected: p.connected,
             role:
-                reveal || p.id === vieweId || (me?.role === 'MAFIA' && p.role === 'MAFIA')
+                reveal || p.id === viewerId || (me?.role === 'MAFIA' && p.role === 'MAFIA')
                     ? p.role
                     : null,
         })),
