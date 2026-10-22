@@ -4,21 +4,30 @@ jspm_packages/
 web_modules/
 .pnp
 .pnp.js
+.yarn/cache
+.yarn/unplugged
+.pnpm-store
 
 # Environment Variables & Secrets
 .env
 .env.*
+.env*.local
+*.local
 !.env.example
+!.env.*.example
 *.pem
 *.key
 *.cert
 
 # Production & Build Outputs
 dist/
+dist-ssr/
 build/
 out/
 .next/
 .nuxt/
+.vercel/
+.output/
 
 # Logs & Debugging
 logs/
@@ -43,6 +52,8 @@ coverage/
 
 # Cache directories
 .cache/
+.vite/
+.turbo/
 .parcel-cache/
 .eslintcache
 .stylelintcache
@@ -55,15 +66,24 @@ coverage/
 
 # IDE & Code Editors
 .idea/
-*.swp
-*.swo
-*~
-*.code-workspace
 .vscode/*
 !.vscode/settings.json
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+*.swp
+*.swo
+*.sw?
+*~
+*.code-workspace
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.user
+.cursor/
+.claude/
+.gemini/
 
 # Operating System Files
 .DS_Store
@@ -74,3 +94,4 @@ coverage/
 Thumbs.db
 ehthumbs.db
 desktop.ini
+$RECYCLE.BIN/

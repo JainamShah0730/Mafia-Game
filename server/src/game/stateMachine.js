@@ -1,4 +1,4 @@
-import { assignRoles, MIN_PLAYERS, MAX_PLAYERS, NIGHT_ROLES } from "./roles.js";
+import { assignRoles, MIN_PLAYERS, MAX_PLAYERS, NIGHT_ROLES, isMafiaTeam } from './roles.js';
 import { checkWin } from "./rules.js";
 
 
@@ -39,7 +39,7 @@ export function startGame(room, requesterId) {
     if (room.hostId !== requesterId) throw new Error("Only the host can start")
     if (room.phase !== 'LOBBY') throw new Error("Game already started")
     const ids = Object.keys(room.players)
-    if (ids.length < MIN_PLAYERS) throw new Error(`Need At least ${MIN_PLAYERS} players`)
+    if (ids.length < MIN_PLAYERS) throw new Error(`Need at least ${MIN_PLAYERS} players`)
     const roles = assignRoles(ids.length)
     ids.forEach((id, i) => (room.players[id].role = roles[i]))
     return beginNight(room)
@@ -61,8 +61,8 @@ export function submitNightAction(room, actorId, targetId) {
     if (!actor?.alive) throw new Error('You cannot act')
     if (!NIGHT_ROLES.includes(actor.role)) throw new Error('Your role has no night action')
     if (!target?.alive) throw new Error('Invalid target')
-    if (actor.role === 'MAFIA' && target.role === 'MAFIA') {
-        throw new Error('You cannot target your own team')
+    if (isMafiaTeam(actor.role) && isMafiaTeam(target.role)) {
+        throw new Error('You cannot target your own team');
     }
     room.nightActions[actorId] = targetId
     return room
@@ -75,19 +75,25 @@ export function allNightActionsIn(room) {
 }
 
 export function resolveNight(room) {
-    const mafiaTally = {}
-    let savedId = null
+    const mafiaTally = {};
+    let savedId = null;
+    let framedId = null;
+
+    // the frame must be known before the detective's result is calculated
+    for (const [actorId, targetId] of Object.entries(room.nightActions)) {
+        if (room.players[actorId].role === 'FRAMER') framedId = targetId;
+    }
 
     for (const [actorId, targetId] of Object.entries(room.nightActions)) {
-        const role = room.players[actorId].role
-        if (role === 'MAFIA') mafiaTally[targetId] = (mafiaTally[targetId] || 0) + 1
-        if (role === 'DOCTOR') savedId = targetId
+        const role = room.players[actorId].role;
+        if (role === 'MAFIA') mafiaTally[targetId] = (mafiaTally[targetId] || 0) + 1;
+        if (role === 'DOCTOR') savedId = targetId;
         if (role === 'DETECTIVE') {
             room.investigation = {
                 detectiveId: actorId,
                 targetId,
-                isMafia: room.players[targetId].role === 'MAFIA',
-            }
+                isMafia: isMafiaTeam(room.players[targetId].role) || targetId === framedId,
+            };
         }
     }
 
@@ -173,9 +179,10 @@ export function viewFor(room, viewerId) {
         players: Object.values(room.players).map((p) => ({
             id: p.id,
             name: p.name,
+            alive: p.alive,
             connected: p.connected,
             role:
-                reveal || p.id === viewerId || (me?.role === 'MAFIA' && p.role === 'MAFIA')
+                reveal || p.id === viewerId || (isMafiaTeam(me?.role) && isMafiaTeam(p.role))
                     ? p.role
                     : null,
         })),
