@@ -2,104 +2,124 @@ import express from 'express';
 import http from 'http';
 import cors from 'cors';
 import { Server } from 'socket.io';
+import { createAdapter } from '@socket.io/redis-adapter';
+import { pubClient, subClient } from './store/redis.js';
 import { store } from './store/roomStore.js';
+import { withRoomLock } from './store/lock.js';
 import * as sm from './game/stateMachine.js';
-import { broadcast, enterPhase, advance, clearTimers } from './game/controller.js';
+import { broadcast, enterPhase, step, startDeadlinePoller } from './game/controller.js';
 
+const PORT = process.env.PORT || 4000;
 
-const app = express()
-app.use(cors())
-app.get('/health', (req, res) => res.send('ok'))
+const app = express();
+app.use(cors());
+app.get('/health', (_req, res) => res.json({ ok: true, instance: PORT }));
 
-const server = http.createServer(app)
-const io = new Server(server, { cors: { origin: '*' } })
+const server = http.createServer(app);
+const io = new Server(server, {
+    cors: { origin: '*' },
+    transports: ['websocket'], // pure websockets: no sticky sessions needed behind a load balancer
+});
+io.adapter(createAdapter(pubClient, subClient));
 
-const cleanName = (n) => String(n || '').trim().slice(0, 20) || 'Player'
-const normCode = (c) => String(c || '').trim().toUpperCase()
+const cleanName = (n) => String(n || '').trim().slice(0, 20) || 'Player';
+const normCode = (c) => String(c || '').trim().toUpperCase();
 
-async function uniqueCode() {
-    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ'
-    for (; ;) {
-        let code = ''
-        for (let i = 0; i < 4; i++) code += letters[Math.floor(Math.random() * letters.length)]
-        if (!(await store.exists(code))) return code
+async function createRoomWithUniqueCode(host) {
+    const letters = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+    for (let attempt = 0; attempt < 20; attempt++) {
+        let code = '';
+        for (let i = 0; i < 4; i++) code += letters[Math.floor(Math.random() * letters.length)];
+        const room = sm.createRoom(code, host);
+        if (await store.create(room)) return room;
     }
-}
-
-async function getRoomFor(code, playerId) {
-    const room = await store.get(normCode(code))
-    if (!room) throw new Error('Room not found ')
-    if (!room.players[playerId]) throw new Error('You are not in this room ')
-    return room
+    throw new Error('Could not create a room, try again');
 }
 
 io.on('connection', (socket) => {
-    const playerId = socket.handshake.auth?.playerId
-    if (!playerId) return socket.disconnect(true)
-    socket.join(`player:${playerId}`)
+    const playerId = socket.handshake.auth?.playerId;
+    if (!playerId) return socket.disconnect(true);
+    socket.join(`player:${playerId}`);
+    console.log(`[:${PORT}] connected ${playerId}`);
 
     const on = (event, handler) =>
         socket.on(event, async (payload = {}, ack = () => { }) => {
             try {
-                const result = (await handler(payload)) ?? {}
-                ack({ ok: true, ...result })
+                const result = (await handler(payload)) ?? {};
+                ack({ ok: true, ...result });
             } catch (err) {
-                ack({ ok: false, error: err.message })
+                ack({ ok: false, error: err.message });
             }
-        }
-        )
+        });
+
+    // Lock the room, load fresh state, check the player belongs, then run fn(room)
+    const inRoom = (code, fn) => {
+        const c = normCode(code);
+        return withRoomLock(c, async () => {
+            const room = await store.get(c);
+            if (!room) throw new Error('Room not found');
+            if (!room.players[playerId]) throw new Error('You are not in this room');
+            return fn(room);
+        });
+    };
 
     on('create_room', async ({ name }) => {
-        const code = await uniqueCode()
-        const room = sm.createRoom(code, { id: playerId, name: cleanName(name) })
-        await store.set(room)
-        socket.data.code = code
-        broadcast(io, room)
-        return { code }
-    })
-
-    on('join_room', async ({ code, name }) => {
-        const room = await store.get(normCode(code))
-        if (!room) throw new Error('Room not found')
-        sm.addPlayer(room, { id: playerId, name: cleanName(name) })
-        await store.set(room)
-        socket.data.code = room.code
-        broadcast(io, room)
-        return { code: room.code }
-    })
-
-    on('rejoin', async ({ code }) => {
-        const room = await getRoomFor(code, playerId)
-        room.players[playerId].connected = true
-        socket.data.code = room.code
-        await store.set(room)
-        broadcast(io, room)
-    })
-
-    on('start_game', async ({ code }) => {
-        const room = await getRoomFor(code, playerId)
-        sm.startGame(room, playerId)
-        await enterPhase(io, room)
-    })
-
-    on('night_action', async ({ code, targetId }) => {
-        const room = await getRoomFor(code, playerId)
-        sm.submitNightAction(room, playerId, targetId)
-        await store.set(room)
-        if (sm.allNightActionsIn(room)) await advance(io, room.code, 'NIGHT', room.round)
-        else broadcast(io, room)
-    })
-
-    on('vote', async ({ code, targetId }) => {
-        const room = await getRoomFor(code, playerId);
-        sm.castVote(room, playerId, targetId);
-        await store.set(room);
-        if (sm.allVotesIn(room)) await advance(io, room.code, 'VOTING', room.round);
-        else broadcast(io, room);
+        const room = await createRoomWithUniqueCode({ id: playerId, name: cleanName(name) });
+        socket.data.code = room.code;
+        broadcast(io, room);
+        return { code: room.code };
     });
 
+    on('join_room', async ({ code, name }) => {
+        const c = normCode(code);
+        return withRoomLock(c, async () => {
+            const room = await store.get(c);
+            if (!room) throw new Error('Room not found');
+            sm.addPlayer(room, { id: playerId, name: cleanName(name) });
+            await store.set(room);
+            socket.data.code = c;
+            broadcast(io, room);
+            return { code: c };
+        });
+    });
+
+    on('rejoin', ({ code }) =>
+        inRoom(code, async (room) => {
+            room.players[playerId].connected = true;
+            socket.data.code = room.code;
+            await store.set(room);
+            broadcast(io, room);
+        })
+    );
+
+    on('start_game', ({ code }) =>
+        inRoom(code, async (room) => {
+            sm.startGame(room, playerId);
+            await enterPhase(io, room);
+        })
+    );
+
+    on('night_action', ({ code, targetId }) =>
+        inRoom(code, async (room) => {
+            sm.submitNightAction(room, playerId, targetId);
+            if (sm.allNightActionsIn(room)) return step(io, room);
+            await store.set(room);
+            broadcast(io, room);
+        })
+    );
+
+    on('vote', ({ code, targetId }) =>
+        inRoom(code, async (room) => {
+            sm.castVote(room, playerId, targetId);
+            if (sm.allVotesIn(room)) return step(io, room);
+            await store.set(room);
+            broadcast(io, room);
+        })
+    );
+
     on('chat', async ({ code, text }) => {
-        const room = await getRoomFor(code, playerId);
+        const room = await store.get(normCode(code)); // read-only, so no lock needed
+        if (!room?.players[playerId]) throw new Error('You are not in this room');
         const me = room.players[playerId];
         const allowed = ['LOBBY', 'DAY', 'VOTING', 'GAME_OVER'].includes(room.phase);
         if (!allowed) throw new Error('No chatting at night');
@@ -111,29 +131,22 @@ io.on('connection', (socket) => {
     socket.on('disconnect', async () => {
         const code = socket.data.code;
         if (!code) return;
-        // the player may have another tab open, so only mark offline if no sockets remain
-        const remaining = await io.in(`player:${playerId}`).fetchSockets();
-        if (remaining.length) return;
-
-        const room = await store.get(code);
-        if (!room?.players[playerId]) return;
-        room.players[playerId].connected = false;
-        await store.set(room);
-        broadcast(io, room);
-
-        // clean up abandoned rooms so memory doesn't grow forever
-        if (Object.values(room.players).every((p) => !p.connected)) {
-            setTimeout(async () => {
-                const r = await store.get(code);
-                if (r && Object.values(r.players).every((p) => !p.connected)) {
-                    clearTimers(code);
-                    await store.delete(code);
-                }
-            }, 10 * 60 * 1000);
+        try {
+            // the player may be connected on another tab or another server
+            const remaining = await io.in(`player:${playerId}`).fetchSockets();
+            if (remaining.length) return;
+            await withRoomLock(code, async () => {
+                const room = await store.get(code);
+                if (!room?.players[playerId]) return;
+                room.players[playerId].connected = false;
+                await store.set(room);
+                broadcast(io, room);
+            });
+        } catch (err) {
+            console.error('disconnect handler:', err.message);
         }
     });
+});
 
-})
-
-const PORT = process.env.PORT || 4000;
-server.listen(PORT, () => console.log(`Mafia server on :${PORT}`))
+startDeadlinePoller(io);
+server.listen(PORT, () => console.log(`Mafia server on :${PORT}`));

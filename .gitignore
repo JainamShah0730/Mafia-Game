@@ -18,6 +18,10 @@ web_modules/
 *.pem
 *.key
 *.cert
+*.crt
+*.pfx
+*.p12
+secrets/
 
 # Production & Build Outputs
 dist/
@@ -28,6 +32,7 @@ out/
 .nuxt/
 .vercel/
 .output/
+*.tsbuildinfo
 
 # Logs & Debugging
 logs/
@@ -46,23 +51,36 @@ pids/
 *.tmp
 *.temp
 
-# Test & Coverage
+# Local Database & Redis Persistence
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+dump.rdb
+*.rdb
+appendonly.aof
+appendonlydir/
+
+# Docker Local Overrides
+docker-compose.override.yml
+docker-compose.local.yml
+docker-compose.*.local.yml
+
+# Test & Coverage Reports
 coverage/
 .nyc_output/
+test-results/
+playwright-report/
+loadtest-results/
 
 # Cache directories
 .cache/
 .vite/
 .turbo/
 .parcel-cache/
+.rollup.cache/
 .eslintcache
 .stylelintcache
-
-# Local database files
-*.sqlite
-*.sqlite3
-*.db
-*.db-journal
 
 # IDE & Code Editors
 .idea/
@@ -71,6 +89,7 @@ coverage/
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+.history/
 *.swp
 *.swo
 *.sw?
@@ -84,6 +103,7 @@ coverage/
 .cursor/
 .claude/
 .gemini/
+.agents/
 
 # Operating System Files
 .DS_Store

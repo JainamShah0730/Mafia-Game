@@ -2,7 +2,12 @@ import { assignRoles, MIN_PLAYERS, MAX_PLAYERS, NIGHT_ROLES, isMafiaTeam } from 
 import { checkWin } from "./rules.js";
 
 
-export const DURATIONS = { NIGHT: 30000, DAY: 30000, VOTING: 30000 }
+// export const DURATIONS = { NIGHT: 30000, DAY: 30000, VOTING: 30000 }
+export const DURATIONS = {
+    NIGHT: Number(process.env.NIGHT_MS || 30000),
+    DAY: Number(process.env.DAY_MS || 30000),
+    VOTING: Number(process.env.VOTING_MS || 30000),
+};
 
 const newPlayer = ({ id, name }) => ({
     id, name, role: null, alive: true, connected: true,

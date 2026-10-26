@@ -9,10 +9,19 @@ function getPlayerId() {
     return id
 }
 
-export const playerId = getPlayerId()
+const params = new URLSearchParams(window.location.search);
+const port = params.get('port') || 4000;
+const URL = import.meta.env.VITE_SERVER_URL || `http://${window.location.hostname}:${port}`;
 
-const URL = import.meta.env.VITE_SERVER_URL || `http://${window.location.hostname}:4000`
-export const socket = io(URL, { auth: { playerId } })
+export const socket = io(URL, {
+    auth: { playerId: getPlayerId() },
+    transports: ['websocket'],
+});
 
-export const send = (event, payload) =>
-    new Promise((resolve) => socket.emit(event, payload, resolve))
+export function send(event, payload = {}) {
+    return new Promise((resolve) => {
+        socket.emit(event, payload, (res) => {
+            resolve(res || { ok: false, error: 'No response from server' });
+        });
+    });
+}
