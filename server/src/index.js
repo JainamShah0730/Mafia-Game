@@ -14,6 +14,7 @@ const PORT = process.env.PORT || 4000;
 const app = express();
 const ORIGINS = process.env.CLIENT_ORIGIN ? process.env.CLIENT_ORIGIN.split(',') : '*';
 app.use(cors({ origin: ORIGINS }));
+app.get(['/health', '/healthz'], (_req, res) => res.json({ ok: true, instance: PORT }));
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -149,4 +150,4 @@ io.on('connection', (socket) => {
 });
 
 startDeadlinePoller(io);
-server.listen(PORT, () => console.log(`Mafia server on :${PORT}`));
+server.listen(PORT, '0.0.0.0', () => console.log(`Mafia server on :${PORT}`));
