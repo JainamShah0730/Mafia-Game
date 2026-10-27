@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { socket, send } from './socket.js'
 import Home from './components/Home.jsx'
 import Lobby from './components/Lobby.jsx'
@@ -9,16 +9,18 @@ export default function App() {
   const [messages, setMessages] = useState([])
   const [error, setError] = useState('')
 
-  const showError = (msg) => {
+  const showError = useCallback((msg) => {
     setError(msg)
     setTimeout(() => setError(''), 4000)
-  }
+  }, [])
 
-  const leave = () => {
+  const dismissError = useCallback(() => setError(''), [])
+
+  const leave = useCallback(() => {
     sessionStorage.removeItem('roomCode')
     setGame(null)
     setMessages([])
-  }
+  }, [])
 
   useEffect(() => {
     const onState = (s) => setGame(s)
@@ -47,12 +49,16 @@ export default function App() {
   else if (game.phase === 'LOBBY')
     screen = <Lobby game={game} messages={messages} onError={showError} onLeave={leave} />
   else screen = <Game game={game} messages={messages} onError={showError} onLeave={leave} />
+
   return (
     <div className="app">
-      <h1>Mafia</h1>
-      {error && <div className="error">{error}</div>}
+      {error && (
+        <div className="error-toast" role="alert">
+          <span>{error}</span>
+          <button onClick={dismissError} aria-label="Dismiss error">&times;</button>
+        </div>
+      )}
       {screen}
     </div>
   )
-
 }

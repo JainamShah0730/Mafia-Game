@@ -19,9 +19,14 @@ web_modules/
 *.key
 *.cert
 *.crt
+*.cer
+*.ca-bundle
 *.pfx
 *.p12
+*.kdbx
+*.jks
 secrets/
+.envrc
 
 # Production & Build Outputs
 dist/
@@ -60,18 +65,21 @@ dump.rdb
 *.rdb
 appendonly.aof
 appendonlydir/
+redis-data/
+data/
 
-# Docker Local Overrides
+# Docker Local Overrides & Artifacts
 docker-compose.override.yml
 docker-compose.local.yml
 docker-compose.*.local.yml
 
-# Test & Coverage Reports
+# Test, Benchmarks & Coverage Reports
 coverage/
 .nyc_output/
 test-results/
 playwright-report/
 loadtest-results/
+loadtest*.log
 
 # Cache directories
 .cache/
@@ -100,10 +108,15 @@ loadtest-results/
 *.njsproj
 *.sln
 *.user
-.cursor/
+
+# AI Assistants & Agents
+
 .claude/
 .gemini/
 .agents/
+
+.system_generated/
+.windsurf/
 
 # Operating System Files
 .DS_Store
