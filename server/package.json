@@ -5,10 +5,14 @@
   "type": "module",
   "main": "src/index.js",
   "scripts": {
+    "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "sim": "node scripts/simulate.js",
     "test": "node --test",
     "load": "node scripts/loadtest.js"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "keywords": [],
   "author": "",

@@ -128,3 +128,8 @@ Thumbs.db
 ehthumbs.db
 desktop.ini
 $RECYCLE.BIN/
+
+node_modules/
+dist/
+.env
+*.log

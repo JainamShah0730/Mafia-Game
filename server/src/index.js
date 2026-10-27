@@ -12,13 +12,13 @@ import { broadcast, enterPhase, step, startDeadlinePoller } from './game/control
 const PORT = process.env.PORT || 4000;
 
 const app = express();
-app.use(cors());
-app.get('/health', (_req, res) => res.json({ ok: true, instance: PORT }));
+const ORIGINS = process.env.CLIENT_ORIGIN ? process.env.CLIENT_ORIGIN.split(',') : '*';
+app.use(cors({ origin: ORIGINS }));
 
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { origin: '*' },
-    transports: ['websocket'], // pure websockets: no sticky sessions needed behind a load balancer
+    cors: { origin: ORIGINS },
+    transports: ['websocket'],
 });
 io.adapter(createAdapter(pubClient, subClient));
 
